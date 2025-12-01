@@ -1070,9 +1070,9 @@ def upscale_img_tiled(
 
     _, _, height_final, width_final = lr_img_tensor_padded.shape
 
-    logger.debug(
-        f"Original LR: {width_original}x{height_original} | Target SR: {width_target}x{height_target}"
-    )
+    # logger.debug(
+    #     f"Original LR: {width_original}x{height_original} | Target SR: {width_target}x{height_target}"
+    # )
 
     final_img_canvas = torch.zeros(
         (batch_size, channels, height_final * scale_factor, width_final * scale_factor),
@@ -1110,7 +1110,7 @@ def upscale_img_tiled(
                 final_width_start:final_width_end,
             ] += 1
 
-    logger.debug("All tiles processed. Blending results...")
+    # logger.debug("All tiles processed. Blending results...")
 
     output_padded = final_img_canvas / count_canvas
 

@@ -57,6 +57,8 @@ def train_step(
         with autocast(device, dtype=torch.bfloat16, enabled=True):
             sr_img_tensor = generator(lr_img_tensor)
 
+            sr_img_tensor = torch.clamp(sr_img_tensor, -1.0, 1.0)
+
             sr_img_tensor_imagenet = convert_img(sr_img_tensor, "[-1, 1]", "imagenet")
             hr_img_tensor_imagenet = convert_img(hr_img_tensor, "[-1, 1]", "imagenet")
 
@@ -541,9 +543,6 @@ def main() -> None:
         discriminator.parameters(), lr=config.DISCRIMINATOR_LEARNING_RATE
     )
 
-    # generator_scaler = GradScaler(device) if device == "cuda" else None
-    # discriminator_scaler = GradScaler(device) if device == "cuda" else None
-
     generator_scheduler = MultiStepLR(
         optimizer=generator_optimizer,
         milestones=config.SCHEDULER_MILESTONES,
@@ -604,8 +603,6 @@ def main() -> None:
                 generator_optimizer=generator_optimizer,
                 discriminator_optimizer=discriminator_optimizer,
                 metrics=metrics,
-                # generator_scaler=generator_scaler,
-                # discriminator_scaler=discriminator_scaler,
                 generator_scheduler=generator_scheduler,
                 discriminator_scheduler=discriminator_scheduler,
                 device=device,
@@ -626,15 +623,13 @@ def main() -> None:
                 ] * len(discriminator_optimizer.param_groups)
 
             metrics.epochs = config.EPOCHS
-            #
-            # if generator_scheduler and discriminator_scheduler and start_epoch > 1:
-            #     epochs_to_skip = start_epoch - 1
-            #
-            #     for _ in range(epochs_to_skip):
+
+            # if generator_scheduler and start_epoch > 1:
+            #     logger.info(f"Fast-forwarding schedulers to epoch {start_epoch}...")
+            #     for _ in range(start_epoch - 1):
             #         generator_scheduler.step()
-            #         discriminator_scheduler.step()
-            #
-            #     logger.info(f"Schedulers advanced to epoch {start_epoch}")
+            #         if discriminator_scheduler:
+            #             discriminator_scheduler.step()
         else:
             logger.warning(
                 "ESRGAN checkpoints not found, start training from the beginning..."
@@ -646,7 +641,6 @@ def main() -> None:
 
     logger.info("Compiling models...")
     generator.compile()
-    # discriminator.compile()
 
     train(
         train_data_loader=train_data_loader,
@@ -665,8 +659,6 @@ def main() -> None:
         metrics=metrics,
         psnr_metric=psnr_metric,
         ssim_metric=ssim_metric,
-        # generator_scaler=generator_scaler,
-        # discriminator_scaler=discriminator_scaler,
         generator_scheduler=generator_scheduler,
         discriminator_scheduler=discriminator_scheduler,
         device=device,

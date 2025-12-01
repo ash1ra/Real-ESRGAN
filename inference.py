@@ -186,11 +186,11 @@ def main() -> None:
         output_path=config.INFERENCE_OUTPUT_IMG_PATH,
         scaling_factor=config.SCALING_FACTOR,
         use_downscale=True,
-        use_tiling=False,
+        use_tiling=True,
         create_comparisson=True,
         comparisson_path=config.INFERECE_COMPARISON_IMG_PATH,
         orientation="vertical",
-        use_network_interpolation=True,
+        use_network_interpolation=False,
         alpha=0.8,
         device=device,
     )

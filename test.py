@@ -17,12 +17,12 @@ def test_step(
     data_loader: DataLoader,
     generator: nn.Module,
     truncated_vgg19: nn.Module,
-    content_loss_fn: nn.Module,
+    perceptual_loss_fn: nn.Module,
     psnr_metric: PeakSignalNoiseRatio,
     ssim_metric: StructuralSimilarityIndexMeasure,
     device: Literal["cuda", "cpu"] = "cpu",
 ) -> tuple[float, float, float]:
-    total_content_loss = 0.0
+    total_perceptual_loss = 0.0
 
     generator.eval()
 
@@ -35,12 +35,17 @@ def test_step(
             sr_img_tensor_normalized = convert_img(sr_img_tensor, "[-1, 1]", "imagenet")
             hr_img_tensor_normalized = convert_img(hr_img_tensor, "[-1, 1]", "imagenet")
 
-            sr_img_tensor_in_vgg_space = truncated_vgg19(sr_img_tensor_normalized)
-            hr_img_tensor_in_vgg_space = truncated_vgg19(hr_img_tensor_normalized)
+            with torch.no_grad():
+                sr_img_tensor_in_vgg_space = truncated_vgg19(sr_img_tensor_normalized)
+                hr_img_tensor_in_vgg_space = truncated_vgg19(hr_img_tensor_normalized)
 
-            content_loss = content_loss_fn(
-                sr_img_tensor_in_vgg_space, hr_img_tensor_in_vgg_space
-            )
+            perceptual_loss = torch.tensor(0.0, device=device)
+            for layer_name, weight in config.PERCEPTUAL_LOSS_LAYER_WEIGHTS.items():
+                layer_loss = perceptual_loss_fn(
+                    sr_img_tensor_in_vgg_space[layer_name],
+                    hr_img_tensor_in_vgg_space[layer_name],
+                )
+                perceptual_loss += weight * layer_loss
 
             y_hr_tensor = convert_img(hr_img_tensor, "[-1, 1]", "y-channel")
             y_sr_tensor = convert_img(sr_img_tensor, "[-1, 1]", "y-channel")
@@ -52,16 +57,16 @@ def test_step(
             psnr_metric.update(y_sr_tensor, y_hr_tensor)  # type: ignore
             ssim_metric.update(y_sr_tensor, y_hr_tensor)  # type: ignore
 
-            total_content_loss += content_loss.item()
+            total_perceptual_loss += perceptual_loss.item()
 
-        total_content_loss /= len(data_loader)
+        total_perceptual_loss /= len(data_loader)
         total_psnr = psnr_metric.compute().item()  # type: ignore
         total_ssim = ssim_metric.compute().item()  # type: ignore
 
         psnr_metric.reset()
         ssim_metric.reset()
 
-    return total_content_loss, total_psnr, total_ssim
+    return total_perceptual_loss, total_psnr, total_ssim
 
 
 def main() -> None:
@@ -79,7 +84,7 @@ def main() -> None:
 
     truncated_vgg19 = TruncatedVGG19().to(device)
 
-    content_loss_fn = nn.L1Loss()
+    perceptual_loss_fn = nn.L1Loss()
 
     psnr_metric = PeakSignalNoiseRatio(data_range=1.0).to(device)
     ssim_metric = StructuralSimilarityIndexMeasure(data_range=1.0).to(device)
@@ -110,7 +115,7 @@ def main() -> None:
             data_loader=data_loader,
             generator=generator,
             truncated_vgg19=truncated_vgg19,
-            content_loss_fn=content_loss_fn,
+            perceptual_loss_fn=perceptual_loss_fn,
             psnr_metric=psnr_metric,
             ssim_metric=ssim_metric,
             device=device,
